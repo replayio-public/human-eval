@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "tsx main.ts"
   },
   "keywords": [],
   "author": "",
@@ -12,6 +13,11 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^0.0.34",
     "@ai-sdk/openai": "^0.0.40",
-    "ai": "^3.2.38"
-  }
+    "@types/node": "^22.0.0",
+    "ai": "^3.2.38",
+    "tsx": "^4.16.2",
+    "zod": "^3.23.8"
+  },
+  "packageManager": "pnpm@7.30.3+sha1.fb200e05d66ad9e2d44f1440ffeaaf656e1bc10c",
+  "prettier": {}
 }
