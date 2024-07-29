@@ -35,6 +35,16 @@ console.assert = (cond: boolean, ...args) => {
   return _assert(cond, ...args);
 };
 
+function makeTestCode(p: HumanEvalProblem, answer: string) {
+  const header = (s: string) =>
+    `\n\n// ###################\n// ${s}\n// ###################\n`;
+  return (
+    `${header("PROMPT")}${p.prompt}\n` +
+    `${header("ANSWER")}${answer}` +
+    `${header("TEST")}${p.test}`
+  );
+}
+
 async function runOneTest(p: HumanEvalProblem) {
   const answer = await generateText({
     model: openai("gpt-3.5-turbo"),
@@ -42,8 +52,9 @@ async function runOneTest(p: HumanEvalProblem) {
   });
 
   let err: any;
+  const code = makeTestCode(p, answer.text);
   try {
-    eval(p.prompt + " " + answer.text + "\n" + p.test);
+    eval(code);
   } catch (_err: any) {
     err = _err;
   }
@@ -63,7 +74,7 @@ async function runOneTest(p: HumanEvalProblem) {
   await fs.writeFile(resultJsonPath, str);
 
   const resultAnswerPath = path.join(dir, p.sanitized_task_id + ".js");
-  await fs.writeFile(resultAnswerPath, p.prompt + " " + answer.text + "\n" + p.test + (err ? `\n\n/*\n ${err.stack}\n*/` : ""));
+  await fs.writeFile(resultAnswerPath, code + (err ? `\n\n/*\n ${err.stack}\n*/` : ""));
 
   if (err) {
     console.log(`Failed on ${p.task_id}: ${err}`);
