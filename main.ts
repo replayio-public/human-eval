@@ -69,6 +69,7 @@ async function runOneTest(p: HumanEvalProblem) {
     console.log(`Failed on ${p.task_id}: ${err}`);
   }
   console.log(`Results: ${resultJsonPath}`);
+  console.log(`JS (prompt+answer+test): ${resultAnswerPath}`);
 }
 
 async function main() {
