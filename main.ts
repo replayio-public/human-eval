@@ -2,7 +2,15 @@ import { generateText } from "ai";
 import { openai } from "@ai-sdk/openai";
 import * as fs from "fs/promises";
 import path from 'path';
+import dotenv from 'dotenv';
 // import uuid from uuid;
+
+dotenv.config({ path: path.resolve(__dirname, ".env") });
+dotenv.config({ path: path.resolve(__dirname, ".env.secret") });
+
+if (!process.env.OPENAI_API_KEY) {
+  throw new Error(`OPENAI_API_KEY missing. Make sure you have provided it in your .env.secret file.`);
+}
 
 const RUN_IDENTIFIER = Date.now() + "";
 
