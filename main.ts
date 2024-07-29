@@ -50,7 +50,6 @@ async function runOneTest(p: HumanEvalProblem) {
 
   const result = {
     task_id: p.task_id,
-    answer: answer.text,
     error: err && {
       stack: err.stack,
     },
@@ -58,14 +57,18 @@ async function runOneTest(p: HumanEvalProblem) {
 
   const dir = path.join(__dirname, "results", RUN_IDENTIFIER);
   await fs.mkdir(dir, { recursive: true });
-  const fpath = path.join(dir, p.sanitized_task_id + ".json");
+
+  const resultJsonPath = path.join(dir, p.sanitized_task_id + ".result.json");
   const str = JSON.stringify(result, null, 2);
-  await fs.writeFile(fpath, str);
+  await fs.writeFile(resultJsonPath, str);
+
+  const resultAnswerPath = path.join(dir, p.sanitized_task_id + ".js");
+  await fs.writeFile(resultAnswerPath, p.prompt + " " + answer.text);
 
   if (err) {
     console.log(`Failed on ${p.task_id}: ${err}`);
   }
-  console.log(`Results: ${fpath}`);
+  console.log(`Results: ${resultJsonPath}`);
 }
 
 async function main() {
@@ -87,7 +90,7 @@ async function main() {
   }
 
   // for (const p of problems) {
-  const N = 10;
+  const N = 20;
   // for (const p of problems.slice(0, 10)) {
   for (let i = 0; i < N; ++i) {
     const p = problems[i];
