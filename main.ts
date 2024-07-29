@@ -28,7 +28,6 @@ interface HumanEvalProblem {
 const _assert = console.assert;
 
 console.assert = (cond: boolean, ...args) => {
-  // console.log('HI', cond, ...args, new Error(""))
   if (!cond) {
     throw new Error(`ASSERTION FAILED: ${args}`);
   }
@@ -45,50 +44,63 @@ function makeTestCode(p: HumanEvalProblem, answer: string) {
   );
 }
 
-async function runOneTest(p: HumanEvalProblem) {
+interface ProblemResult {
+  error: { stack: string } | null;
+  task_id: string;
+  problem: HumanEvalProblem;
+}
+
+async function tryProblem(problem: HumanEvalProblem): Promise<ProblemResult> {
   const answer = await generateText({
     model: openai("gpt-3.5-turbo"),
-    prompt: p.prompt,
+    prompt: problem.prompt,
   });
 
-  let err: any;
-  const code = makeTestCode(p, answer.text);
+  let err: Error | undefined;
+  const code = makeTestCode(problem, answer.text);
   try {
     eval(code);
   } catch (_err: any) {
     err = _err;
   }
 
-  const result = {
-    task_id: p.task_id,
-    error: err && {
-      stack: err.stack,
-    },
+  const result: ProblemResult = {
+    problem,
+    task_id: problem.task_id,
+    error: err
+      ? {
+          stack: err.stack as string,
+        }
+      : null,
   };
 
   const dir = path.join(__dirname, "results", RUN_IDENTIFIER);
   await fs.mkdir(dir, { recursive: true });
 
-  const resultJsonPath = path.join(dir, p.sanitized_task_id + ".result.json");
+  const resultJsonPath = path.join(
+    dir,
+    problem.sanitized_task_id + ".result.json",
+  );
   const str = JSON.stringify(result, null, 2);
   await fs.writeFile(resultJsonPath, str);
 
-  const resultAnswerPath = path.join(dir, p.sanitized_task_id + ".js");
+  const resultAnswerPath = path.join(dir, problem.sanitized_task_id + ".js");
   await fs.writeFile(
     resultAnswerPath,
-    p.prompt +
+    problem.prompt +
       " " +
       answer.text +
       "\n" +
-      p.test +
+      problem.test +
       (err ? `\n\n/*\n ${err.stack}\n*/` : ""),
   );
 
   if (err) {
-    console.log(`Failed on ${p.task_id}: ${err}`);
+    console.log(`Failed on ${problem.task_id}: ${err}`);
   }
   console.log(`Results: ${resultJsonPath}`);
   console.log(`JS (prompt+answer+test): ${resultAnswerPath}`);
+  return result;
 }
 
 async function main() {
@@ -111,12 +123,10 @@ async function main() {
 
   const startProblem = 10;
   const endProblem = 20;
-  // for (const p of problems) {
-  // for (const p of problems.slice(0, 10)) {
   for (let i = startProblem; i < endProblem; ++i) {
     const p = problems[i];
     console.group(`PROBLEM ${i}`);
-    await runOneTest(p);
+    await tryProblem(p);
     console.groupEnd();
   }
 }
