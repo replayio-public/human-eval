@@ -63,7 +63,7 @@ async function runOneTest(p: HumanEvalProblem) {
   await fs.writeFile(resultJsonPath, str);
 
   const resultAnswerPath = path.join(dir, p.sanitized_task_id + ".js");
-  await fs.writeFile(resultAnswerPath, p.prompt + " " + answer.text);
+  await fs.writeFile(resultAnswerPath, p.prompt + " " + answer.text + "\n" + p.test + (err ? `\n\n/*\n ${err.stack}\n*/` : ""));
 
   if (err) {
     console.log(`Failed on ${p.task_id}: ${err}`);
@@ -89,10 +89,11 @@ async function main() {
     p.sanitized_task_id = p.task_id.replaceAll("/", "_");
   }
 
+  const startProblem = 10;
+  const endProblem = 20;
   // for (const p of problems) {
-  const N = 20;
   // for (const p of problems.slice(0, 10)) {
-  for (let i = 0; i < N; ++i) {
+  for (let i = startProblem; i < endProblem; ++i) {
     const p = problems[i];
     console.group(`PROBLEM ${i}`);
     await runOneTest(p);
