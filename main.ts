@@ -1,15 +1,16 @@
 import { generateText } from "ai";
 import { openai } from "@ai-sdk/openai";
 import * as fs from "fs/promises";
-import path from 'path';
-import dotenv from 'dotenv';
-// import uuid from uuid;
+import path from "path";
+import dotenv from "dotenv";
 
 dotenv.config({ path: path.resolve(__dirname, ".env") });
 dotenv.config({ path: path.resolve(__dirname, ".env.secret") });
 
 if (!process.env.OPENAI_API_KEY) {
-  throw new Error(`OPENAI_API_KEY missing. Make sure you have provided it in your .env.secret file.`);
+  throw new Error(
+    `OPENAI_API_KEY missing. Make sure you have provided it in your .env.secret file.`,
+  );
 }
 
 const RUN_IDENTIFIER = Date.now() + "";
@@ -42,17 +43,17 @@ async function runOneTest(p: HumanEvalProblem) {
 
   let err: any;
   try {
-  eval(p.prompt + " " + answer.text + "\n" + p.test);
+    eval(p.prompt + " " + answer.text + "\n" + p.test);
   } catch (_err: any) {
-    err  = _err;
+    err = _err;
   }
 
   const result = {
     task_id: p.task_id,
     answer: answer.text,
     error: err && {
-      stack: err.stack
-    }
+      stack: err.stack,
+    },
   };
 
   const dir = path.join(__dirname, "results", RUN_IDENTIFIER);
@@ -61,6 +62,9 @@ async function runOneTest(p: HumanEvalProblem) {
   const str = JSON.stringify(result, null, 2);
   await fs.writeFile(fpath, str);
 
+  if (err) {
+    console.log(`Failed on ${p.task_id}: ${err}`);
+  }
   console.log(`Results: ${fpath}`);
 }
 
@@ -77,11 +81,10 @@ async function main() {
         throw new Error(`JSON.parse failed: ${err.stack}\n\nINPUT: ${x}`);
       }
     }) as HumanEvalProblem[];
-  
+
   for (const p of problems) {
     p.sanitized_task_id = p.task_id.replaceAll("/", "_");
   }
-  
 
   // for (const p of problems) {
   const N = 10;
