@@ -3,6 +3,8 @@ import { openai } from "@ai-sdk/openai";
 import * as fs from "fs/promises";
 import path from "path";
 import dotenv from "dotenv";
+import { execSync } from 'child_process';
+
 
 dotenv.config({ path: path.resolve(__dirname, ".env") });
 dotenv.config({ path: path.resolve(__dirname, ".env.secret") });
@@ -74,9 +76,14 @@ function makeTestCode(p: HumanEvalProblem, answer: string) {
   const header = (s: string) =>
     `\n\n// ###################\n// ${s}\n// ###################\n`;
   return (
-    `${header("PROMPT")}${p.prompt}\n` +
-    `${header("ANSWER")}${answer}` +
-    `${header("TEST")}${p.test}`
+    `
+    (()=>{
+    ${header("PROMPT")}${p.prompt}
+    ${header("ANSWER")}${answer}
+    ${header("TEST")}${p.test}
+    })()
+    `
+
   );
 }
 
@@ -95,36 +102,59 @@ async function tryProblem(
   // That broke with this error: <ERROR>
   // Please try again. Respond only with JavaScript. Do not repeat anything in this prompt.
   // Original Instructions: <PROMPT>
+
+
+  const myPrompt = previousResult ? `
+You previously wrote this code:
+
+  \`\`\`
+  ${problem.declaration}
+  ${previousResult.response}
+  \`\`\`
+
+  That broke with this error:
+  \`\`\`
+  ${previousResult.error}
+  \`\`\`
+  The test case thet didn't pass was this one:
+  \`\`\`
+  ${previousResult.error?.failedAssert}
+  \`\`\`
+  Please try again. Respond only with JavaScript.
+  Original Instructions:
+  ${problem.prompt}
+` : problem.prompt;
+
+  // if (previousResult) {
+  //   console.log(':poop:')
+  //   console.log(myPrompt)
+  //   0();
+  //   process.exit();
+  // }
+
   const answer = await generateText({
     model: openai("gpt-3.5-turbo"),
-    prompt: previousResult
-      ? `
-      You previously wrote this code:
-
-        \`\`\`
-        ${problem.declaration}
-        ${previousResult.response}
-        \`\`\`
-
-        That broke with this error:
-        \`\`\`
-        ${previousResult.error}
-        \`\`\`
-        The test case thet didn't pass was this one:
-        \`\`\`
-        ${previousResult.error?.failedAssert}
-        \`\`\`
-        Please try again. Respond only with JavaScript.
-        Original Instructions:
-        ${problem.prompt}
-      `
-      : problem.prompt,
+    prompt: myPrompt,
   });
 
   let err: Error | undefined;
   const code = makeTestCode(problem, answer.text);
   try {
-    eval(code);
+    {
+      // eval(code);
+      const tempFilePath = path.join(__dirname, `temp_${Math.random().toString(36).substring(2, 15)}.js`);
+      await fs.writeFile(tempFilePath, code);
+      // try {
+      // const output = execSync(`node ${tempFilePath}`, { stdio: ['pipe', 'pipe', 'pipe'] });
+      // console.log('file', tempFilePath)
+      // console.log(`stdout: ${output.toString()}`);
+      require(tempFilePath)
+      // console.error(`stderr: ${output.stderr.toString()}`);
+      // } catch (error: any) {
+      //   console.error(`exec error: ${error}`);
+      //   err = error;
+      // }
+    }
   } catch (_err: any) {
     err = _err;
     console.log(err);
@@ -136,9 +166,9 @@ async function tryProblem(
     response: code,
     error: err
       ? {
-          stack: err.stack as string,
-          failedAssert: extractEvalLine(err.stack!, code),
-        }
+        stack: err.stack as string,
+        failedAssert: extractEvalLine(err.stack!, code),
+      }
       : null,
   };
 
@@ -192,9 +222,10 @@ async function main() {
   for (let i = startProblem; i < endProblem; ++i) {
     let attempts = 1;
     const p = problems[i];
+    let result;
     console.group(`PROBLEM ${i}/ATTEMPT ${attempts}`);
     while (attempts <= MaxAttempts) {
-      const result = await tryProblem(p);
+      result = await tryProblem(p, result);
       if (!result.error) {
         break;
       }
