@@ -3,8 +3,7 @@ import { openai } from "@ai-sdk/openai";
 import * as fs from "fs/promises";
 import path from "path";
 import dotenv from "dotenv";
-import { execSync } from 'child_process';
-
+import { extractErrorLines, HumanEvalProblem, makeTestCode, ProblemResult, sanitizeFileName } from './util';
 
 dotenv.config({ path: path.resolve(__dirname, ".env") });
 dotenv.config({ path: path.resolve(__dirname, ".env.secret") });
@@ -17,16 +16,6 @@ if (!process.env.OPENAI_API_KEY) {
 
 const RUN_IDENTIFIER = Date.now() + "";
 
-interface HumanEvalProblem {
-  canonical_solution: string;
-  declaration: string;
-  example_test: string;
-  prompt: string;
-  task_id: string;
-  test: string;
-  sanitized_task_id?: string;
-}
-
 const _assert = console.assert;
 
 console.assert = (cond: boolean, ...args) => {
@@ -36,75 +25,18 @@ console.assert = (cond: boolean, ...args) => {
   return _assert(cond, ...args);
 };
 
-function extractEvalLine(stackTrace: string, evalCode: string) {
-  // Split the stack trace into lines
-  const lines = stackTrace.split("\n");
-
-  // Find the line mentioning 'eval'
-  let evalLine;
-  for (let line of lines) {
-    if (line.includes("eval at")) {
-      evalLine = line;
-      break;
-    }
-  }
-
-  if (!evalLine) {
-    throw new Error("No eval call found in the stack trace.");
-  }
-
-  // Extract the line number using a regular expression
-  const match = evalLine.match(/<anonymous>:(\d+):\d+/);
-  if (!match) {
-    throw new Error("Could not find line number in the eval call.");
-  }
-
-  const lineNumber = parseInt(match[1], 10);
-
-  // Get the corresponding line of code from the evalCode array
-  if (lineNumber - 1 < evalCode.length) {
-    const codeLine = evalCode.split("\n")[lineNumber - 1];
-    return codeLine;
-  } else {
-    throw new Error(
-      "Line number from stack trace exceeds length of eval code."
-    );
-  }
-}
-
-function makeTestCode(p: HumanEvalProblem, answer: string) {
-  const header = (s: string) =>
-    `\n\n// ###################\n// ${s}\n// ###################\n`;
-  return (
-    `
-    (()=>{
-    ${header("PROMPT")}${p.prompt}
-    ${header("ANSWER")}${answer}
-    ${header("TEST")}${p.test}
-    })()
-    `
-
-  );
-}
-
-interface ProblemResult {
-  error: { stack: string; failedAssert: string } | null;
-  task_id: string;
-  problem: HumanEvalProblem;
-  response: string;
-}
-
 async function tryProblem(
   problem: HumanEvalProblem,
-  previousResult?: ProblemResult
+  previousResult: ProblemResult | undefined,
+  i: number
 ): Promise<ProblemResult> {
   // You previously wrote this code: <PREVIOUS CODE>
   // That broke with this error: <ERROR>
   // Please try again. Respond only with JavaScript. Do not repeat anything in this prompt.
   // Original Instructions: <PROMPT>
 
-
-  const myPrompt = previousResult ? `
+  const myPrompt = previousResult
+    ? `
 You previously wrote this code:
 
   \`\`\`
@@ -116,21 +48,15 @@ You previously wrote this code:
   \`\`\`
   ${previousResult.error}
   \`\`\`
-  The test case thet didn't pass was this one:
+  The failure was on these lines:
   \`\`\`
-  ${previousResult.error?.failedAssert}
+  ${previousResult.error?.failedAssert?.join("\n")}
   \`\`\`
   Please try again. Respond only with JavaScript.
   Original Instructions:
   ${problem.prompt}
-` : problem.prompt;
-
-  // if (previousResult) {
-  //   console.log(':poop:')
-  //   console.log(myPrompt)
-  //   0();
-  //   process.exit();
-  // }
+`
+    : problem.prompt;
 
   const answer = await generateText({
     model: openai("gpt-3.5-turbo"),
@@ -139,36 +65,28 @@ You previously wrote this code:
 
   let err: Error | undefined;
   const code = makeTestCode(problem, answer.text);
+  const testFname = `PROBLEM_${problem.sanitized_task_id}_${i}.js`;
+  const testFilePath = path.join(__dirname, testFname);
   try {
     {
       // eval(code);
-      const tempFilePath = path.join(__dirname, `temp_${Math.random().toString(36).substring(2, 15)}.js`);
-      await fs.writeFile(tempFilePath, code);
-      // try {
-      // const output = execSync(`node ${tempFilePath}`, { stdio: ['pipe', 'pipe', 'pipe'] });
-      // console.log('file', tempFilePath)
-      // console.log(`stdout: ${output.toString()}`);
-      require(tempFilePath)
-      // console.error(`stderr: ${output.stderr.toString()}`);
-      // } catch (error: any) {
-      //   console.error(`exec error: ${error}`);
-      //   err = error;
-      // }
+      await fs.writeFile(testFilePath, code);
+      require(testFilePath);
     }
   } catch (_err: any) {
     err = _err;
-    console.log(err);
   }
 
   const result: ProblemResult = {
     problem,
     task_id: problem.task_id,
     response: code,
+    i,
     error: err
       ? {
-        stack: err.stack as string,
-        failedAssert: extractEvalLine(err.stack!, code),
-      }
+          stack: err.stack as string,
+          failedAssert: extractErrorLines(err.stack!, code, testFilePath),
+        }
       : null,
   };
 
@@ -188,10 +106,6 @@ You previously wrote this code:
     code + (err ? `\n\n/*\n ${err.stack}\n*/` : "")
   );
 
-  console.log(`${problem.declaration}
-${answer.text}`);
-  console.log(`Results: ${resultJsonPath}`);
-  console.log(`JS (prompt+answer+test): ${resultAnswerPath}`);
   if (err) {
     console.log(`Failed on ${problem.task_id}: ${err}`);
   }
@@ -213,7 +127,7 @@ async function main() {
     }) as HumanEvalProblem[];
 
   for (const p of problems) {
-    p.sanitized_task_id = p.task_id.replaceAll("/", "_");
+    p.sanitized_task_id = sanitizeFileName(p.task_id);
   }
 
   const startProblem = 10;
@@ -225,7 +139,7 @@ async function main() {
     let result;
     console.group(`PROBLEM ${i}/ATTEMPT ${attempts}`);
     while (attempts <= MaxAttempts) {
-      result = await tryProblem(p, result);
+      result = await tryProblem(p, result || undefined, attempts);
       if (!result.error) {
         break;
       }
