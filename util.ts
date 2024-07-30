@@ -1,5 +1,3 @@
-import { execSync } from "child_process";
-
 
 export interface HumanEvalProblem {
   canonical_solution: string;
@@ -28,7 +26,7 @@ export function extractErrorLines(
 
   // Extract the line number using a regular expression
   const codeLines = evalCode.split("\n");
-  console.log("DDBG LINE0: ", codeLines[0]);
+  // console.log("DDBG LINE0: ", codeLines[0]);
   const match = matchingLines.map((l) => {
     const i = l.indexOf(filePath) + filePath.length + 1;
     const str = l.substring(i);
@@ -43,7 +41,7 @@ export function extractErrorLines(
 
     // Get the corresponding line of code from the evalCode array
     if (lineNumber - 1 < evalCode.length) {
-      console.log("DDBG LINE ", lineNumber, codeLines.join("\n"));
+      // console.log("DDBG LINE ", lineNumber, codeLines.join("\n"));
       const codeLine = codeLines[lineNumber - 1];
       return codeLine;
     } else {
@@ -62,7 +60,7 @@ export function makeTestCode(p: HumanEvalProblem, answer: string) {
     (()=>{
     ${header("PROMPT")}${p.prompt}
     ${header("ANSWER")}${answer}
-    ${header("TEST")}${p.test}
+    ${!answer.includes(p.test) ? `${header("TEST")}${p.test}` : ""}
     })()
     `;
 }

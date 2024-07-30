@@ -35,6 +35,9 @@ async function tryProblem(
   // Please try again. Respond only with JavaScript. Do not repeat anything in this prompt.
   // Original Instructions: <PROMPT>
 
+  // TODO: This does not produce correct JS on the second run.
+  // We could not add tests on follow-up runs. 
+  TODO;
   const myPrompt = previousResult
     ? `
 You previously wrote this code:
@@ -52,7 +55,7 @@ You previously wrote this code:
   \`\`\`
   ${previousResult.error?.failedAssert?.join("\n")}
   \`\`\`
-  Please try again. Respond only with JavaScript.
+  Please try again. Respond only with JavaScript. DO NOT include the test case. Only the solution. Make sure to match the initial open brace.
   Original Instructions:
   ${problem.prompt}
 `
@@ -67,6 +70,7 @@ You previously wrote this code:
   const code = makeTestCode(problem, answer.text);
   const testFname = `PROBLEM_${problem.sanitized_task_id}_${i}.js`;
   const testFilePath = path.join(__dirname, testFname);
+  console.group(`Running test "${testFilePath}"...`);
   try {
     {
       // eval(code);
@@ -76,6 +80,7 @@ You previously wrote this code:
   } catch (_err: any) {
     err = _err;
   }
+  console.groupEnd();
 
   const result: ProblemResult = {
     problem,
@@ -107,7 +112,7 @@ You previously wrote this code:
   );
 
   if (err) {
-    console.log(`Failed on ${problem.task_id}: ${err}`);
+    console.log(`Failed on ${problem.task_id}: ${err.stack}`);
   }
   return result;
 }
