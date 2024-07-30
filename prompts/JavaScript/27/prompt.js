@@ -1,0 +1,5 @@
+/* For a given string, flip lowercase characters to uppercase and uppercase to lowercase.
+  >>> flipCase('Hello')
+  'hELLO'
+  */
+const flipCase = (string) => {

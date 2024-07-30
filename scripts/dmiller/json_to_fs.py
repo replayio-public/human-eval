@@ -12,7 +12,7 @@ def process_json_file(file_path):
             directory, subdirectory = task_id.split('/')
             
             # Create the directory structure
-            path = os.path.join(directory, subdirectory)
+            path = os.path.join("prompts", directory, subdirectory)
             os.makedirs(path, exist_ok=True)
             
             # Write the prompt to the file
