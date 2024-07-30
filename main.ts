@@ -48,12 +48,37 @@ interface ProblemResult {
   error: { stack: string } | null;
   task_id: string;
   problem: HumanEvalProblem;
+  response: string;
 }
 
-async function tryProblem(problem: HumanEvalProblem): Promise<ProblemResult> {
+async function tryProblem(
+  problem: HumanEvalProblem,
+  previousResult?: ProblemResult,
+): Promise<ProblemResult> {
+  // You previously wrote this code: <PREVIOUS CODE>
+  // That broke with this error: <ERROR>
+  // Please try again. Respond only with JavaScript. Do not repeat anything in this prompt.
+  // Original Instructions: <PROMPT>
   const answer = await generateText({
     model: openai("gpt-3.5-turbo"),
-    prompt: problem.prompt,
+    prompt: previousResult
+      ? `
+      You previously wrote this code:
+
+        \`\`\`
+        ${problem.declaration}
+        ${previousResult.response}
+        \`\`\`
+
+        That broke with this error:
+        \`\`\`
+        ${previousResult?.error}
+        \`\`\`
+        Please try again. Respond only with JavaScript.
+        Original Instructions:
+        ${problem.prompt}
+      `
+      : problem.prompt,
   });
 
   let err: Error | undefined;
@@ -62,11 +87,13 @@ async function tryProblem(problem: HumanEvalProblem): Promise<ProblemResult> {
     eval(code);
   } catch (_err: any) {
     err = _err;
+    console.log(err);
   }
 
   const result: ProblemResult = {
     problem,
     task_id: problem.task_id,
+    response: code,
     error: err
       ? {
           stack: err.stack as string,
@@ -98,6 +125,8 @@ async function tryProblem(problem: HumanEvalProblem): Promise<ProblemResult> {
   if (err) {
     console.log(`Failed on ${problem.task_id}: ${err}`);
   }
+  console.log(`${problem.declaration}
+${answer.text}`);
   console.log(`Results: ${resultJsonPath}`);
   console.log(`JS (prompt+answer+test): ${resultAnswerPath}`);
   return result;
@@ -123,10 +152,18 @@ async function main() {
 
   const startProblem = 10;
   const endProblem = 20;
+  const MaxAttempts = 3;
   for (let i = startProblem; i < endProblem; ++i) {
+    let attempts = 1;
     const p = problems[i];
-    console.group(`PROBLEM ${i}`);
-    await tryProblem(p);
+    console.group(`PROBLEM ${i}/ATTEMPT ${attempts}`);
+    while (attempts <= MaxAttempts) {
+      const result = await tryProblem(p);
+      if (!result.error) {
+        break;
+      }
+      attempts++;
+    }
     console.groupEnd();
   }
 }
