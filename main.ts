@@ -9,7 +9,7 @@ dotenv.config({ path: path.resolve(__dirname, ".env.secret") });
 
 if (!process.env.OPENAI_API_KEY) {
   throw new Error(
-    `OPENAI_API_KEY missing. Make sure you have provided it in your .env.secret file.`,
+    `OPENAI_API_KEY missing. Make sure you have provided it in your .env.secret file.`
   );
 }
 
@@ -34,6 +34,42 @@ console.assert = (cond: boolean, ...args) => {
   return _assert(cond, ...args);
 };
 
+function extractEvalLine(stackTrace: string, evalCode: string) {
+  // Split the stack trace into lines
+  const lines = stackTrace.split("\n");
+
+  // Find the line mentioning 'eval'
+  let evalLine;
+  for (let line of lines) {
+    if (line.includes("eval at")) {
+      evalLine = line;
+      break;
+    }
+  }
+
+  if (!evalLine) {
+    throw new Error("No eval call found in the stack trace.");
+  }
+
+  // Extract the line number using a regular expression
+  const match = evalLine.match(/<anonymous>:(\d+):\d+/);
+  if (!match) {
+    throw new Error("Could not find line number in the eval call.");
+  }
+
+  const lineNumber = parseInt(match[1], 10);
+
+  // Get the corresponding line of code from the evalCode array
+  if (lineNumber - 1 < evalCode.length) {
+    const codeLine = evalCode.split("\n")[lineNumber - 1];
+    return codeLine;
+  } else {
+    throw new Error(
+      "Line number from stack trace exceeds length of eval code."
+    );
+  }
+}
+
 function makeTestCode(p: HumanEvalProblem, answer: string) {
   const header = (s: string) =>
     `\n\n// ###################\n// ${s}\n// ###################\n`;
@@ -45,7 +81,7 @@ function makeTestCode(p: HumanEvalProblem, answer: string) {
 }
 
 interface ProblemResult {
-  error: { stack: string } | null;
+  error: { stack: string; failedAssert: string } | null;
   task_id: string;
   problem: HumanEvalProblem;
   response: string;
@@ -53,7 +89,7 @@ interface ProblemResult {
 
 async function tryProblem(
   problem: HumanEvalProblem,
-  previousResult?: ProblemResult,
+  previousResult?: ProblemResult
 ): Promise<ProblemResult> {
   // You previously wrote this code: <PREVIOUS CODE>
   // That broke with this error: <ERROR>
@@ -72,7 +108,11 @@ async function tryProblem(
 
         That broke with this error:
         \`\`\`
-        ${previousResult?.error}
+        ${previousResult.error}
+        \`\`\`
+        The test case thet didn't pass was this one:
+        \`\`\`
+        ${previousResult.error?.failedAssert}
         \`\`\`
         Please try again. Respond only with JavaScript.
         Original Instructions:
@@ -97,6 +137,7 @@ async function tryProblem(
     error: err
       ? {
           stack: err.stack as string,
+          failedAssert: extractEvalLine(err.stack!, code),
         }
       : null,
   };
@@ -106,7 +147,7 @@ async function tryProblem(
 
   const resultJsonPath = path.join(
     dir,
-    problem.sanitized_task_id + ".result.json",
+    problem.sanitized_task_id + ".result.json"
   );
   const str = JSON.stringify(result, null, 2);
   await fs.writeFile(resultJsonPath, str);
@@ -114,16 +155,16 @@ async function tryProblem(
   const resultAnswerPath = path.join(dir, problem.sanitized_task_id + ".js");
   await fs.writeFile(
     resultAnswerPath,
-    code + (err ? `\n\n/*\n ${err.stack}\n*/` : ""),
+    code + (err ? `\n\n/*\n ${err.stack}\n*/` : "")
   );
 
-  if (err) {
-    console.log(`Failed on ${problem.task_id}: ${err}`);
-  }
   console.log(`${problem.declaration}
 ${answer.text}`);
   console.log(`Results: ${resultJsonPath}`);
   console.log(`JS (prompt+answer+test): ${resultAnswerPath}`);
+  if (err) {
+    console.log(`Failed on ${problem.task_id}: ${err}`);
+  }
   return result;
 }
 
@@ -146,7 +187,7 @@ async function main() {
   }
 
   const startProblem = 10;
-  const endProblem = 20;
+  const endProblem = 11;
   const MaxAttempts = 3;
   for (let i = startProblem; i < endProblem; ++i) {
     let attempts = 1;
