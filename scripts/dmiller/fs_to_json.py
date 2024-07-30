@@ -37,7 +37,7 @@ def write_json_file(data, output_file):
 
 # Usage
 base_path = 'prompts'  # The base directory where your prompts are stored
-output_file = 'output.jsonl'  # The output JSONL file
+output_file = 'data.jsonl'  # The output JSONL file
 
 data = process_directory(base_path)
 write_json_file(data, output_file)
