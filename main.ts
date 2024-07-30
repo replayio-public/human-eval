@@ -74,7 +74,11 @@ async function runOneTest(p: HumanEvalProblem) {
   await fs.writeFile(resultJsonPath, str);
 
   const resultAnswerPath = path.join(dir, p.sanitized_task_id + ".js");
-  await fs.writeFile(resultAnswerPath, p.prompt + " " + answer.text + "\n" + p.test + (err ? `\n\n/*\n ${err.stack}\n*/` : ""));
+
+  await fs.writeFile(
+    resultAnswerPath,
+    code + (err ? `\n\n/*\n ${err.stack}\n*/` : "")
+  );
 
   if (err) {
     console.log(`Failed on ${p.task_id}: ${err}`);
