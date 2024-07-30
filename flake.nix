@@ -33,6 +33,8 @@
         packages = with pkgs; [
           bun
           nodePackages.pnpm
+          nodePackages.prettier
+          nodePackages.typescript-language-server
         ];
       };
     });
